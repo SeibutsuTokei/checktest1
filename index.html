@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DVA複合識別テスト（最終クリーン版）</title>
+    <title>DVA複合識別テスト</title>
     <style>
         /* 【CSS: 基本設定とテストエリア】 */
         body { margin: 0; font-family: sans-serif; text-align: center; }
         h1 { margin-top: 10px; }
         #test-area {
-            width: 90%;
-            max-width: 800px;
-            height: 400px;
+            /* ★修正点1: 表示範囲の調整★ */
+            width: 80%;
+            max-width: 600px;
+            height: 300px;
             background-color: #f0f0f0; /* 背景色 */
             margin: 20px auto;
             position: relative;
@@ -81,17 +82,18 @@
         const startButton = document.getElementById('btn-start');
         const answerButtons = document.querySelectorAll('.answer-buttons button[data-direction]');
         
-        // 💡 【複合DVAゲーム設定】
-        const BASE_SPEED = 9;        
-        const SPEED_INCREMENT = 1.15; 
+        // 💡 【複合DVAゲーム設定 - 最終確定】
+        // ★修正点2: 初期速度と最大速度の調整★
+        const BASE_SPEED = 12;       // 最初の速度 (px/frame)
+        const MAX_SPEED = 35;        // 漸近する目標の最大速度 (px/frame)
+        const SPEED_INCREMENT_FACTOR = 0.05; 
         const INITIAL_RING_SIZE = 60; 
         
         const MAX_TOTAL_TRIALS = 15; 
         const RING_COUNT_SEQUENCE = [
-            1, 
-            2, 2, 2, 2, 
-            3, 3, 3, 3, 
-            4, 4, 4, 4, 4, 4 
+            1, 1, 
+            2, 2, 2, 2, 2, 2, 
+            3, 3, 3, 3, 3, 3, 3 
         ];
         
         const DIRECTIONS = ['up', 'down', 'left', 'right'];
@@ -109,8 +111,8 @@
         let currentQuestionIndex = 0;   
 
         // --- フォーム連携設定 ---
-        const FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd00l_bHS8qGgzMBzATRH8ZWYKWlIHMNCCaq1nOhvERueNklw/viewform?usp=header"; 
-        const SCORE_FIELD_NAME = "entry.1995895806=99"; 
+        const FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd00l_bHS8qGgzMBzATRH8ZWYKWlIHMNCCaq1nOhvERueNklw/viewform"; 
+        const SCORE_FIELD_NAME = "entry.1995895806"; 
 
         // --- ランドルト環の生成と制御 ---
         
@@ -151,6 +153,12 @@
 
             return container;
         }
+        
+        /** 速度をMAX_SPEEDに漸近させるロジック */
+        function calculateNextSpeed(current) {
+            return current + (MAX_SPEED - current) * SPEED_INCREMENT_FACTOR;
+        }
+
 
         function startTrial() {
             if (totalTrials >= MAX_TOTAL_TRIALS) {
@@ -186,7 +194,6 @@
                 ringElements.push(ringElement);
             }
 
-            // ★修正点1: 速度表示を削除
             statusDisplay.textContent = `試行 ${totalTrials} / ${MAX_TOTAL_TRIALS}回：環の数 ${currentRingCount}個`;
             questionDisplay.textContent = '';
             
@@ -235,7 +242,6 @@
         }
         
         function handleAnswer(selectedDirection) {
-            // 回答ボタンを一時的に無効化し、多重回答を防ぐ
             answerButtons.forEach(b => b.disabled = true);
             
             const correctDirection = correctDirections[currentQuestionIndex];
@@ -263,16 +269,14 @@
             hideButtons();
             score++; 
             
-            // 正解の場合のみ速度増加
-            currentSpeed *= SPEED_INCREMENT; 
+            currentSpeed = calculateNextSpeed(currentSpeed);
             
             if (totalTrials >= MAX_TOTAL_TRIALS) {
                 endTest();
                 return;
             }
             
-            // ★修正点2: 速度表示を削除
-            let nextStatus = `全問正解！ ✅ (連続正解数: ${score}回)。`;
+            let nextStatus = `全問正解！ ✅ (正解数: ${score}回)。`;
             let nextRingCount = RING_COUNT_SEQUENCE[totalTrials]; 
 
             nextStatus += `次：環の数 ${nextRingCount}個。`;
@@ -287,8 +291,7 @@
         function endTest() {
             hideButtons();
             questionDisplay.textContent = '';
-            // ★修正点3: 終了時のステータス表示から速度に関する情報を削除
-            statusDisplay.textContent = `テスト終了！正解数: ${score} / ${MAX_TOTAL_TRIALS}試行`;
+            statusDisplay.textContent = `テスト終了！最終スコア (正解数): ${score} / ${MAX_TOTAL_TRIALS}試行`;
             
             answerButtons.forEach(b => b.disabled = true);
 
@@ -318,7 +321,6 @@
             startTrial();
         });
 
-        // 回答ボタンのイベントリスナー
         answerButtons.forEach(button => {
             button.addEventListener('click', (e) => {
                 if (!button.disabled) {
