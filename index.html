@@ -3,76 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DVA複合識別テスト</title>
+    <title>動体視力テスト</title>
     <style>
         /* 【CSS: 基本設定とテストエリア】 */
         body { margin: 0; font-family: sans-serif; text-align: center; }
         h1 { margin-top: 10px; }
         #test-area {
-            /* ★修正点1: 表示範囲の調整★ */
             width: 80%;
             max-width: 600px;
             height: 300px;
-            background-color: #f0f0f0; /* 背景色 */
+            background-color: #f0f0f0; 
             margin: 20px auto;
             position: relative;
             border: 2px solid #333;
             overflow: hidden; 
         }
 
-        /* 【CSS: ランドルト環の描画 - 最終確定版】 */
-        .landolt-ring-instance {
+        /* 【CSS: 数字の描画】 */
+        .moving-number-instance {
             position: absolute;
-            width: var(--diameter);
-            height: var(--diameter);
-            display: block; 
-        }
-
-        .landolt-ring-instance > .ring-body {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            border: var(--ring-thickness) solid black; 
-            background-color: #f0f0f0; 
-            box-sizing: border-box; 
-        }
-        
-        .landolt-ring-instance > .ring-body::after {
-            content: '';
-            position: absolute;
-            width: calc(var(--notch-size) * 3); 
-            height: var(--notch-size); 
-            background-color: #f0f0f0; 
-            top: 50%; 
-            right: calc(0px - var(--notch-size) * 1.5); 
+            font-size: 60px; 
+            font-weight: bold;
+            color: black;
+            white-space: nowrap; 
+            top: 50%;
             transform: translateY(-50%);
+            left: 0; 
         }
         
-        /* 【CSS: 回答ボタンと質問テキスト】 */
-        .answer-buttons { margin-top: 20px; }
-        .answer-buttons button {
+        /* 【CSS: 回答とステータス】 */
+        #answer-input {
+            padding: 8px;
+            font-size: 20px;
+            text-align: center;
+            width: 150px;
+            margin: 10px;
+        }
+        #btn-submit-answer {
             padding: 10px 20px;
             font-size: 18px;
-            margin: 5px;
             cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <h1>DVA複合識別テスト（連続正解チャレンジ）</h1>
+    <h1>動体視力テスト</h1>
     <div id="test-area">
         </div>
 
     <div id="status">準備完了。ボタンを押して開始してください。</div>
     <div id="question" style="margin-bottom: 10px; font-weight: bold;"></div>
 
-    <div class="answer-buttons">
+    <div id="control-area" class="answer-buttons">
         <button id="btn-start">テスト開始</button>
-        <button id="btn-up" data-direction="up" style="display: none;">上</button>
-        <button id="btn-down" data-direction="down" style="display: none;">下</button>
-        <button id="btn-left" data-direction="left" style="display: none;">左</button>
-        <button id="btn-right" data-direction="right" style="display: none;">右</button>
+        
+        <div id="answer-form" style="display: none;">
+            <input type="number" id="answer-input" placeholder="数字を入力" pattern="\d*">
+            <button id="btn-submit-answer">回答を送信</button>
+        </div>
     </div>
 
     <script>
@@ -80,81 +68,74 @@
         const statusDisplay = document.getElementById('status');
         const questionDisplay = document.getElementById('question');
         const startButton = document.getElementById('btn-start');
-        const answerButtons = document.querySelectorAll('.answer-buttons button[data-direction]');
+        const answerForm = document.getElementById('answer-form');
+        const answerInput = document.getElementById('answer-input');
+        const submitButton = document.getElementById('btn-submit-answer');
         
-        // 💡 【複合DVAゲーム設定 - 最終確定】
-        // ★修正点2: 初期速度と最大速度の調整★
-        const BASE_SPEED = 12;       // 最初の速度 (px/frame)
-        const MAX_SPEED = 35;        // 漸近する目標の最大速度 (px/frame)
-        const SPEED_INCREMENT_FACTOR = 0.05; 
-        const INITIAL_RING_SIZE = 60; 
+        // 💡 【複合DVAゲーム設定】
+        const BASE_SPEED = 16;       
+        const MAX_SPEED = 42;        
+        const SPEED_INCREMENT_FACTOR = 0.08; 
         
-        const MAX_TOTAL_TRIALS = 15; 
+        const TARGET_SIZE_EST = 60; // 文字サイズの概算値
+        
+        const MAX_TOTAL_TRIALS = 20; 
         const RING_COUNT_SEQUENCE = [
             1, 1, 
             2, 2, 2, 2, 2, 2, 
-            3, 3, 3, 3, 3, 3, 3 
+            3, 3, 3, 3, 3, 3, 3, 
+            4, 4, 4, 4, 4 
         ];
         
-        const DIRECTIONS = ['up', 'down', 'left', 'right'];
-        
         let currentSpeed = BASE_SPEED; 
-        let currentRingSize = INITIAL_RING_SIZE;
         let currentRingCount = 1; 
         
         let score = 0;          
         let totalTrials = 0;    
         let animationFrameId;
         
-        let ringElements = [];          
-        let correctDirections = [];     
-        let currentQuestionIndex = 0;   
+        let numberElement;           
+        let correctNumber = '';      
 
         // --- フォーム連携設定 ---
         const FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd00l_bHS8qGgzMBzATRH8ZWYKWlIHMNCCaq1nOhvERueNklw/formResponse"; 
         const SCORE_FIELD_NAME = "entry.1995895806"; 
 
-        // --- ランドルト環の生成と制御 ---
+        // --- 数字生成と漸近速度 ---
         
-        function setRingStyle(element, diameter, rotationDeg) {
-            const ringThickness = diameter / 5;       
-            const notchSize = diameter / 5;           
+        /** ★修正された数字生成ロジック★ 隣接する数字は常に異なる */
+        function generateRandomNumber(length) {
+            let result = '';
+            let lastDigit = -1; // 前の数字を保持 (初期値は存在しない-1)
 
-            element.style.setProperty('--diameter', diameter + 'px');
-            element.querySelector('.ring-body').style.setProperty('--ring-thickness', ringThickness + 'px');
-            element.querySelector('.ring-body').style.setProperty('--notch-size', notchSize + 'px');
-            
-            element.querySelector('.ring-body').style.transform = `rotate(${rotationDeg}deg)`;
+            for (let i = 0; i < length; i++) {
+                let newDigit;
+                do {
+                    // 複数桁の場合、最初の桁は0以外にする制約
+                    if (i === 0 && length > 1) {
+                        newDigit = Math.floor(Math.random() * 9) + 1; // 1 to 9
+                    } else {
+                        newDigit = Math.floor(Math.random() * 10); // 0 to 9
+                    }
+                } while (newDigit === lastDigit); // 前の数字と同じなら再抽選
+                
+                result += newDigit;
+                lastDigit = newDigit; // 現在の数字を次のループのために保持
+            }
+            return result;
         }
 
-        function createLandoltRingElement(diameter, index) {
+        function createNumberElement(number) {
             const container = document.createElement('div');
-            container.className = 'landolt-ring-instance';
+            container.className = 'moving-number-instance';
+            container.textContent = number;
             
-            const ringBody = document.createElement('div');
-            ringBody.className = 'ring-body';
-            
-            container.appendChild(ringBody);
-            
-            container.positionX = -diameter; 
+            container.positionX = -TARGET_SIZE_EST * currentRingCount; 
             container.style.left = container.positionX + 'px';
             
-            const testAreaHeight = testArea.clientHeight;
-            const yPosition = (testAreaHeight / 2) - (diameter / 2);
-            container.style.top = yPosition + 'px';
-            
-            const horizontalSpacing = 10; 
-            const totalWidth = (currentRingCount * diameter) + ((currentRingCount - 1) * horizontalSpacing);
-            const initialGroupOffset = totalWidth + 50; 
-            const relativeOffset = index * (diameter + horizontalSpacing);
-            
-            container.positionX = -(initialGroupOffset - relativeOffset);
-            container.style.left = container.positionX + 'px';
-
             return container;
         }
         
-        /** 速度をMAX_SPEEDに漸近させるロジック */
         function calculateNextSpeed(current) {
             return current + (MAX_SPEED - current) * SPEED_INCREMENT_FACTOR;
         }
@@ -174,52 +155,29 @@
             }
             
             testArea.innerHTML = ''; 
-            ringElements = []; 
-            correctDirections = []; 
-            currentQuestionIndex = 0;
-
-            for (let i = 0; i < currentRingCount; i++) {
-                const direction = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
-                correctDirections.push(direction); 
-                
-                let rotationDeg;
-                if (direction === 'up') rotationDeg = 270;      
-                else if (direction === 'right') rotationDeg = 0;   
-                else if (direction === 'down') rotationDeg = 90;  
-                else if (direction === 'left') rotationDeg = 180; 
-
-                const ringElement = createLandoltRingElement(currentRingSize, i);
-                setRingStyle(ringElement, currentRingSize, rotationDeg);
-                testArea.appendChild(ringElement);
-                ringElements.push(ringElement);
-            }
-
-            statusDisplay.textContent = `試行 ${totalTrials} / ${MAX_TOTAL_TRIALS}回：環の数 ${currentRingCount}個`;
+            
+            correctNumber = generateRandomNumber(currentRingCount);
+            numberElement = createNumberElement(correctNumber);
+            
+            testArea.appendChild(numberElement);
+            
+            statusDisplay.textContent = `試行 ${totalTrials} / ${MAX_TOTAL_TRIALS}回：数字 ${currentRingCount}桁`;
             questionDisplay.textContent = '';
             
-            hideButtons();
+            hideAnswerForm();
             
             animationFrameId = requestAnimationFrame(moveTarget);
         }
 
         function moveTarget() {
             const testAreaWidth = testArea.clientWidth;
-            const lastRing = ringElements[ringElements.length - 1]; 
-            const maxX = testAreaWidth; 
-            let finished = false;
+            
+            numberElement.positionX += currentSpeed; 
+            numberElement.style.left = numberElement.positionX + 'px';
 
-            ringElements.forEach(ring => {
-                ring.positionX += currentSpeed; 
-                ring.style.left = ring.positionX + 'px';
-            });
-
-            if (lastRing && lastRing.positionX + currentRingSize >= maxX) {
-                finished = true;
-            }
-
-            if (finished) {
+            if (numberElement.positionX >= testAreaWidth) {
                 cancelAnimationFrame(animationFrameId);
-                ringElements.forEach(ring => ring.style.display = 'none');
+                numberElement.style.display = 'none';
                 startAnswerPhase(); 
             } else {
                 animationFrameId = requestAnimationFrame(moveTarget);
@@ -227,38 +185,22 @@
         }
         
         function startAnswerPhase() {
-            showButtons();
-            answerButtons.forEach(b => b.disabled = false);
-            askNextQuestion();
+            showAnswerForm();
+            answerInput.value = '';
+            answerInput.focus();
+            questionDisplay.textContent = `【回答 ${currentRingCount}桁】 表示された数字は何でしたか？`;
+            statusDisplay.textContent = "数字を入力し、送信ボタンを押してください。";
         }
 
-        function askNextQuestion() {
-            if (currentQuestionIndex < currentRingCount) {
-                questionDisplay.textContent = `【回答 ${currentQuestionIndex + 1} / ${currentRingCount}】 左から${currentQuestionIndex + 1}番目のランドルト環の切れ目の方向は？`;
-                statusDisplay.textContent = "回答ボタンを押してください。";
-            } else {
+        function handleAnswer() {
+            const selectedAnswer = answerInput.value.trim();
+            
+            if (selectedAnswer === correctNumber) {
                 endTrial();
-            }
-        }
-        
-        function handleAnswer(selectedDirection) {
-            answerButtons.forEach(b => b.disabled = true);
-            
-            const correctDirection = correctDirections[currentQuestionIndex];
-            
-            if (selectedDirection === correctDirection) {
-                currentQuestionIndex++;
-                
-                if (currentQuestionIndex < currentRingCount) {
-                    answerButtons.forEach(b => b.disabled = false); 
-                    askNextQuestion(); 
-                } else {
-                    endTrial();
-                }
             } else {
                 // ❌ 不正解の場合：即座にテスト終了
-                hideButtons();
-                questionDisplay.textContent = `不正解！`;
+                hideAnswerForm();
+                questionDisplay.textContent = `不正解！ 正しい数字は ${correctNumber} でした。`;
                 statusDisplay.textContent = `テスト終了！`;
                 
                 setTimeout(endTest, 1500); 
@@ -266,7 +208,6 @@
         }
         
         function endTrial() {
-            hideButtons();
             score++; 
             
             currentSpeed = calculateNextSpeed(currentSpeed);
@@ -276,10 +217,10 @@
                 return;
             }
             
-            let nextStatus = `全問正解！ ✅ (正解数: ${score}回)。`;
+            let nextStatus = `正解！ ✅ (正解数: ${score}回)。`;
             let nextRingCount = RING_COUNT_SEQUENCE[totalTrials]; 
 
-            nextStatus += `次：環の数 ${nextRingCount}個。`;
+            nextStatus += `次：数字 ${nextRingCount}桁。`;
 
             questionDisplay.textContent = '';
             statusDisplay.textContent = nextStatus;
@@ -287,31 +228,29 @@
             setTimeout(startTrial, 1500); 
         }
 
-        /** テスト全体の終了処理。スコアをGoogleフォームに送信する。 */
+        /** テスト全体の終了処理。スコアを画面に表示する。 */
         function endTest() {
-            hideButtons();
+            hideAnswerForm();
+            startButton.style.display = 'none';
             questionDisplay.textContent = '';
-            statusDisplay.textContent = `テスト終了！最終スコア (正解数): ${score} / ${MAX_TOTAL_TRIALS}試行`;
             
-            answerButtons.forEach(b => b.disabled = true);
-
-            // Googleフォームにスコアを自動送信し、リダイレクト
-            sendScoreToGoogleForm(score); 
+            // スコアを画面に表示し、手動入力を促す
+            statusDisplay.innerHTML = `
+                <strong style="color: green; font-size: 24px;">テスト終了！</strong><br>
+                最終スコア (正解数): <span style="font-size: 36px; color: #cc0000;">${score}</span> / ${MAX_TOTAL_TRIALS}試行<br>
+                <br>
+                このスコアをGoogleフォームに手動で入力してください。
+            `;
         }
 
         // --- UI表示/非表示のヘルパー関数 ---
-        function showButtons() {
-            document.getElementById('btn-up').style.display = 'inline-block';
-            document.getElementById('btn-down').style.display = 'inline-block';
-            document.getElementById('btn-left').style.display = 'inline-block';
-            document.getElementById('btn-right').style.display = 'inline-block';
+        function showAnswerForm() {
+            answerForm.style.display = 'block';
+            submitButton.disabled = false;
         }
 
-        function hideButtons() {
-            document.getElementById('btn-up').style.display = 'none';
-            document.getElementById('btn-down').style.display = 'none';
-            document.getElementById('btn-left').style.display = 'none';
-            document.getElementById('btn-right').style.display = 'none';
+        function hideAnswerForm() {
+            answerForm.style.display = 'none';
         }
 
 
@@ -321,22 +260,13 @@
             startTrial();
         });
 
-        answerButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                if (!button.disabled) {
-                    handleAnswer(e.target.dataset.direction);
-                }
-            });
+        submitButton.addEventListener('click', handleAnswer);
+
+        answerInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleAnswer();
+            }
         });
-
-
-        // --- Googleフォーム自動記録関数 ---
-
-        function sendScoreToGoogleForm(finalScore) {
-            const submitUrl = `${FORM_BASE_URL}?${SCORE_FIELD_NAME}=${finalScore}&submit=1`;
-            window.location.href = submitUrl;
-        }
     </script>
 </body>
 </html>
-
