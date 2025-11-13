@@ -9,6 +9,7 @@
         body { margin: 0; font-family: sans-serif; text-align: center; }
         h1 { margin-top: 10px; }
         #test-area {
+            /* 表示範囲の最終設定 */
             width: 80%;
             max-width: 600px;
             height: 300px;
@@ -22,7 +23,7 @@
         /* 【CSS: 数字の描画】 */
         .moving-number-instance {
             position: absolute;
-            font-size: 60px; 
+            font-size: 60px; /* 識別難易度を考慮したフォントサイズ */
             font-weight: bold;
             color: black;
             white-space: nowrap; 
@@ -77,50 +78,49 @@
         const MAX_SPEED = 42;        
         const SPEED_INCREMENT_FACTOR = 0.08; 
         
-        const TARGET_SIZE_EST = 60; // 文字サイズの概算値
+        const TARGET_SIZE_EST = 60; // 文字サイズの概算値 (位置計算用)
         
         const MAX_TOTAL_TRIALS = 20; 
+        // ★修正点★: 15問目まで2桁、16問目から3桁 (4桁なし)
         const RING_COUNT_SEQUENCE = [
-            1, 1, 
-            2, 2, 2, 2, 2, 2, 
-            3, 3, 3, 3, 3, 3, 3, 
-            4, 4, 4, 4, 4 
+            1, 1, // 試行 1-2 (1桁)
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 試行 3-15 (2桁 x 13回)
+            3, 3, 3, 3, 3 // 試行 16-20 (3桁 x 5回)
         ];
         
         let currentSpeed = BASE_SPEED; 
         let currentRingCount = 1; 
         
-        let score = 0;          
-        let totalTrials = 0;    
+        let score = 0;          // 正解数（最終スコア）
+        let totalTrials = 0;    // 試行回数
         let animationFrameId;
         
         let numberElement;           
         let correctNumber = '';      
 
-        // --- フォーム連携設定 ---
+        // --- フォーム連携設定（手動入力のためリダイレクトはしません） ---
         const FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd00l_bHS8qGgzMBzATRH8ZWYKWlIHMNCCaq1nOhvERueNklw/formResponse"; 
         const SCORE_FIELD_NAME = "entry.1995895806"; 
 
         // --- 数字生成と漸近速度 ---
         
-        /** ★修正された数字生成ロジック★ 隣接する数字は常に異なる */
+        /** 隣接する数字は常に異なるように生成 */
         function generateRandomNumber(length) {
             let result = '';
-            let lastDigit = -1; // 前の数字を保持 (初期値は存在しない-1)
+            let lastDigit = -1; 
 
             for (let i = 0; i < length; i++) {
                 let newDigit;
                 do {
-                    // 複数桁の場合、最初の桁は0以外にする制約
                     if (i === 0 && length > 1) {
                         newDigit = Math.floor(Math.random() * 9) + 1; // 1 to 9
                     } else {
                         newDigit = Math.floor(Math.random() * 10); // 0 to 9
                     }
-                } while (newDigit === lastDigit); // 前の数字と同じなら再抽選
+                } while (newDigit === lastDigit); 
                 
                 result += newDigit;
-                lastDigit = newDigit; // 現在の数字を次のループのために保持
+                lastDigit = newDigit; 
             }
             return result;
         }
