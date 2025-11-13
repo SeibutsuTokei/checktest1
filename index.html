@@ -31,6 +31,17 @@
             left: 0; 
         }
         
+        /* 【CSS: カウントダウン表示】 */
+        #countdown-timer {
+            font-size: 80px;
+            font-weight: bold;
+            color: #cc0000;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
         /* 【CSS: 回答とステータス】 */
         #answer-input {
             padding: 8px;
@@ -76,15 +87,16 @@
         const BASE_SPEED = 16;       
         const MAX_SPEED = 42;        
         const SPEED_INCREMENT_FACTOR = 0.08; 
+        const COUNTDOWN_TIME = 3; 
         
-        const TARGET_SIZE_EST = 60; // 文字サイズの概算値
+        const TARGET_SIZE_EST = 60; 
         
         const MAX_TOTAL_TRIALS = 20; 
+        // ★修正点1: 2桁を増やし、4桁を削除。最大難易度を3桁に設定
         const RING_COUNT_SEQUENCE = [
-            1, 1, 
-            2, 2, 2, 2, 2, 2, 
-            3, 3, 3, 3, 3, 3, 3, 
-            4, 4, 4, 4, 4 
+            1, 1, // 試行 1-2
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 試行 3-12 (2桁 x 10回)
+            3, 3, 3, 3, 3, 3, 3, 3 // 試行 13-20 (3桁 x 8回)
         ];
         
         let currentSpeed = BASE_SPEED; 
@@ -96,6 +108,7 @@
         
         let numberElement;           
         let correctNumber = '';      
+        let countdownElement; 
 
         // --- フォーム連携設定 ---
         const FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd00l_bHS8qGgzMBzATRH8ZWYKWlIHMNCCaq1nOhvERueNklw/formResponse"; 
@@ -103,24 +116,23 @@
 
         // --- 数字生成と漸近速度 ---
         
-        /** ★修正された数字生成ロジック★ 隣接する数字は常に異なる */
+        /** 隣接する数字が連続しないランダムな数字を生成 */
         function generateRandomNumber(length) {
             let result = '';
-            let lastDigit = -1; // 前の数字を保持 (初期値は存在しない-1)
+            let lastDigit = -1; 
 
             for (let i = 0; i < length; i++) {
                 let newDigit;
                 do {
-                    // 複数桁の場合、最初の桁は0以外にする制約
                     if (i === 0 && length > 1) {
-                        newDigit = Math.floor(Math.random() * 9) + 1; // 1 to 9
+                        newDigit = Math.floor(Math.random() * 9) + 1; 
                     } else {
-                        newDigit = Math.floor(Math.random() * 10); // 0 to 9
+                        newDigit = Math.floor(Math.random() * 10); 
                     }
-                } while (newDigit === lastDigit); // 前の数字と同じなら再抽選
+                } while (newDigit === lastDigit); 
                 
                 result += newDigit;
-                lastDigit = newDigit; // 現在の数字を次のループのために保持
+                lastDigit = newDigit; 
             }
             return result;
         }
@@ -147,6 +159,11 @@
                 return;
             }
             
+            if (countdownElement) {
+                countdownElement.remove();
+                countdownElement = null;
+            }
+
             currentRingCount = RING_COUNT_SEQUENCE[totalTrials]; 
             totalTrials++;
             
@@ -207,6 +224,39 @@
             }
         }
         
+        /** カウントダウンを実行する関数。isInitialStartで表示メッセージを分岐 */
+        function runCountdown(isInitialStart = false) {
+            let timeLeft = COUNTDOWN_TIME;
+            
+            countdownElement = document.createElement('div');
+            countdownElement.id = 'countdown-timer';
+            testArea.appendChild(countdownElement);
+            
+            const countdownInterval = setInterval(() => {
+                if (timeLeft >= 0) { 
+                    if (timeLeft > 0) {
+                        countdownElement.textContent = timeLeft;
+                    } else {
+                        countdownElement.textContent = 'START';
+                    }
+
+                    let statusText;
+                    const nextRingCount = RING_COUNT_SEQUENCE[totalTrials];
+
+                    if (isInitialStart) {
+                        statusText = `テスト開始まで ${timeLeft}秒...`;
+                    } else {
+                        statusText = `次：数字 ${nextRingCount}桁。 ${timeLeft}秒後にスタート...`;
+                    }
+                    statusDisplay.textContent = statusText;
+                    timeLeft--;
+                } else {
+                    clearInterval(countdownInterval);
+                    startTrial(); // カウントダウン終了後、次の試行へ
+                }
+            }, 1000);
+        }
+
         function endTrial() {
             score++; 
             
@@ -217,15 +267,10 @@
                 return;
             }
             
-            let nextStatus = `正解！ ✅ (正解数: ${score}回)。`;
-            let nextRingCount = RING_COUNT_SEQUENCE[totalTrials]; 
-
-            nextStatus += `次：数字 ${nextRingCount}桁。`;
-
-            questionDisplay.textContent = '';
-            statusDisplay.textContent = nextStatus;
-            
-            setTimeout(startTrial, 1500); 
+            // カウントダウン開始
+            hideAnswerForm();
+            questionDisplay.textContent = `正解！ ✅ (正解数: ${score}回)。`;
+            runCountdown(false); // 2回目以降の試行
         }
 
         /** テスト全体の終了処理。スコアを画面に表示する。 */
@@ -234,6 +279,10 @@
             startButton.style.display = 'none';
             questionDisplay.textContent = '';
             
+            if (countdownElement) {
+                countdownElement.remove();
+            }
+
             // スコアを画面に表示し、手動入力を促す
             statusDisplay.innerHTML = `
                 <strong style="color: green; font-size: 24px;">テスト終了！</strong><br>
@@ -257,7 +306,14 @@
         // --- イベントリスナーの設定 ---
         startButton.addEventListener('click', () => {
             startButton.style.display = 'none';
-            startTrial();
+            
+            // 初回スタート時に変数をリセット
+            score = 0;
+            totalTrials = 0;
+            currentSpeed = BASE_SPEED;
+            
+            // 初回カウントダウンを開始
+            runCountdown(true); 
         });
 
         submitButton.addEventListener('click', handleAnswer);
@@ -265,6 +321,7 @@
         answerInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 handleAnswer();
+                e.preventDefault(); 
             }
         });
     </script>
